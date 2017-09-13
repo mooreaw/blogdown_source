@@ -1,0 +1,131 @@
+---
+title: record linkage walk-through
+author: Andrew
+date: '2017-09-12'
+slug: record-linkage-walkthrough
+categories: ["R"]
+tags: ["R", "data analysis", "record linkage"]
+---
+
+```{r opts, include = FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+```
+
+```{r init}
+set.seed(20170910)
+
+library(tidyverse)
+library(stringr)
+library(randomNames)
+
+# create a 'universe' of records that will form the basis for any matches
+universe <- 
+  data_frame(
+    gender = sample(0:1, 1000, replace = TRUE),
+    ethnic = sample(1:6, 1000, replace = TRUE, prob = c(.05, .07, .25, .12, .46, .05)),
+    name   = randomNames(1000, gender = gender, ethnicity = ethnic)
+  ) %>%
+  mutate(
+    gender = factor(gender, 0:1, c("Male", "Female")),
+    ethnic = factor(ethnic, 1:6, c("Amerin", "Asian", "Black", "Hispanic", "White", "Arabic"))
+  ) %>%
+  separate(name, c("lname", "fname"), sep = ", ")
+
+# set up birth-dates
+universe$by <- sample(1970:1995, 1000, replace = TRUE)
+universe$bm <- sample(1:12, 1000, replace = TRUE)
+
+# ensure that valid days are generated
+universe$bd <- sample(1:30, 1000, replace = TRUE)
+universe$bd <- ifelse(universe$bm == 2, sample(1:28, 1), universe$bd)
+universe$bd <- ifelse(universe$bm %in% c(1, 3, 5, 7:8, 10, 12), sample(1:31, 1), universe$bd)
+
+# create a master ID based on all the fields
+universe$universe_id <- group_indices(universe, gender, ethnic, lname, fname, by, bm, bd)
+```
+
+```{r inspect-universe}
+# should be TRUE
+n_distinct(universe$universe_id) == nrow(universe)
+
+glimpse(universe)
+```
+
+```{r create-lists}
+# create 'list A' and 'list B'
+# A will contain 500 cases, sampled from the universe
+list_a <- sample_n(universe, 500)
+
+# B will contain 200 cases, with 23% coming explicitly from A
+list_b <- sample_n(list_a, 200 * .23)
+```
+
+```{r create-some-errors, echo = FALSE}
+# introduce some typos, errors, and missingness
+list_b[2, 5] <- 1988
+
+list_b[3, 4:5] <- c("Dorothy", 1993)
+
+list_b[4, 3:4] <- c("Sleater", "Lydia")
+
+list_b[6, c(3, 4, 7)] <- c("Cohen", "Tabbitha", 19)
+
+list_b[9, c(4, 7)] <- c("Jonathan", 14)
+
+list_b[12, c(3, 7)] <- c("Farrah", 9)
+
+list_b[20, c(3, 4, 5)] <- c("Robins", "Jaylen", 1988)
+
+list_b[25, 3:4] <- c("Monsanto", "Crystal")
+
+list_b[29, c(4, 6)] <- c("Alex", 5)
+
+list_b[42, 4:5] <- c("Morgen", 1979)
+
+list_b <- list_b %>%
+  mutate(
+    by = as.numeric(by),
+    bm = as.numeric(bm),
+    bd = as.numeric(bd)
+  )
+```
+
+```{r finish-list-b}
+# ensure that the crossover cases are ineligible for re-sampling
+list_b <- universe %>%
+  anti_join(list_b, by = "universe_id") %>%
+  anti_join(list_a, by = "universe_id") %>%
+  sample_n(200 * .77) %>%
+  bind_rows(
+    "no"  = .,
+    "yes" = list_b,
+    .id   = "identity"
+  )
+```
+
+```{r compare-linkage}
+library(RecordLinkage)
+
+link <- compare.linkage(
+  list_a,
+  list_b[, -1],
+  blockfld = list(
+    c("lname", "by"),
+    c("lname", "bm", "bd"),
+    c("fname", "by"),
+    c("by", "bm", "bd", "gender")
+  ),
+  strcmp = TRUE,
+  strcmpfun = jarowinkler,
+  exclude = c("ethnic", "universe_id")
+)
+
+link <- epiWeights(link)
+```
+
+```{r plot-weights}
+# histogram code
+```
+
+```{r view-pairs}
+```
