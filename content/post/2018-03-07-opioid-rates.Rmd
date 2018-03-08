@@ -1,0 +1,120 @@
+---
+title: ""
+author: Andrew
+date: '2018-3-7'
+slug: opm
+categories: ["R"]
+tags: ["R", "data analysis", "data viz", "public policy", "substance abuse"]
+---
+
+```{r opts, include = FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+```
+
+```{r init}
+library(tidyverse)
+library(magrittr)
+library(broom)
+library(margins)
+
+theme_set(theme_minimal(base_size = 14))
+
+stabb <- data_frame(
+  state = state.name,
+  abbrv = state.abb
+)
+```
+
+```{r data}
+has_law <- read_csv("../../data/opioid-rates/has-law.csv")
+
+kff <- dir("../../data/opioid-rates/", pattern = "raw_data", full.names = TRUE) %>%
+  map(read_lines) %>%
+  map(function(x) x[3:55]) %>%
+  map(str_c, collapse = "\n") %>%
+  set_names(c(2011:2016, 2010)) %>%
+  map(read_csv) %>%
+  map(~mutate_all(., as.character)) %>%
+  bind_rows(.id = "year")
+
+kff <- kff %>%
+  select(1:4) %>%
+  set_names(c("year", "state", "opioid_rate", "drug_rate")) %>%
+  mutate_at(vars(contains("rate"), year), as.numeric) %>%
+  left_join(has_law, by = c("state", "year")) %>%
+  left_join(stabb, by = "state")
+```
+
+```{r prep-data-for-analysis}
+kff <- kff %>%
+  group_by(state) %>%
+  arrange(year) %>%
+  mutate(
+    law         = ifelse(is.na(law), 0, law),
+    oprt_true   = opioid_rate,
+    opioid_rate = lag(opioid_rate),
+    drug_rate   = lag(drug_rate),
+    year        = as.numeric(year)
+  ) %>%
+  ungroup() %>%
+  filter(
+    state != "United States",
+    year < 2016,
+    year >= 2011
+  )
+```
+
+```{r fit}
+logit <- glm(law ~ opioid_rate + drug_rate + year, data = kff, family = binomial)
+
+ame <- summary(margins(logit))
+```
+
+```{r plot fit}
+ggplot(kff, aes(x = opioid_rate, y = law)) +
+  scale_y_continuous(limits = c(0, 1)) +
+  geom_smooth(
+    method = "glm",
+    method.args = list(family = "binomial")
+  ) +
+  labs(
+    x = "Deaths due to opioid overdoses per 100,000 (age adjusted)",
+    y = "Probability laws enacted during a given year"
+  ) +
+  theme(panel.grid.minor = element_blank())
+```
+
+```{r}
+kff %>%
+  group_by(year) %>%
+  arrange(year, desc(oprt_true)) %>%
+  mutate(
+    rank = 1:length(year),
+    law  = factor(law, levels = 0:1, labels = c("No Laws", "Laws Passed"))
+  ) %>%
+  ggplot(aes(x = rank, y = oprt_true, fill = law)) +
+  geom_col() +
+  geom_hline(yintercept = seq(0, 50, 10), color = "white") +
+  geom_text(
+    aes(label = str_glue("{abbrv}, {oprt_true}")),
+    hjust = -.25,
+    size = 3
+  ) +
+  scale_y_continuous(limits = c(0, 50)) +
+  scale_fill_manual(values = c("#bdc9e1", "#045a8d")) +
+  coord_flip() +
+  theme(
+    panel.grid = element_blank(),
+    axis.ticks.x = element_line(),
+    axis.text.y = element_blank(),
+    legend.position = c(.93, .9),
+    legend.title = element_blank()
+  ) +
+  facet_wrap(~year, nrow = 1) +
+  labs(
+    x = "",
+    y = "Deaths due to opioid overdoses per 100,000 (age adjusted)",
+    title = "National opioid overdose mortality, tracking legislation promoting access/use of Naloxone",
+    subtitle = "Legislation status drawn from Doleac & Mukherjee, 2018 (SSRN preprint)"
+  )
+```
