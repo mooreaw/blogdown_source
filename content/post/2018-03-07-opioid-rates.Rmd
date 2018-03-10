@@ -1,7 +1,7 @@
 ---
-title: ""
+title: "Opioids"
 author: Andrew
-date: '2018-3-7'
+date: '2018-03-09'
 slug: opm
 categories: ["R"]
 tags: ["R", "data analysis", "data viz", "public policy", "substance abuse"]
@@ -71,7 +71,7 @@ ame <- summary(margins(logit))
 ```
 
 ```{r plot fit}
-ggplot(kff, aes(x = opioid_rate, y = law)) +
+pfit <- ggplot(kff, aes(x = opioid_rate, y = law)) +
   scale_y_continuous(limits = c(0, 1)) +
   geom_smooth(
     method = "glm",
@@ -84,8 +84,8 @@ ggplot(kff, aes(x = opioid_rate, y = law)) +
   theme(panel.grid.minor = element_blank())
 ```
 
-```{r}
-kff %>%
+```{r state-law-changes}
+p1 <- kff %>%
   group_by(year) %>%
   arrange(year, desc(oprt_true)) %>%
   mutate(
@@ -95,11 +95,11 @@ kff %>%
   ggplot(aes(x = rank, y = oprt_true, fill = law)) +
   geom_col() +
   geom_hline(yintercept = seq(0, 50, 10), color = "white") +
-  geom_text(
-    aes(label = str_glue("{abbrv}, {oprt_true}")),
-    hjust = -.25,
-    size = 3
-  ) +
+  # geom_text(
+  #   aes(label = str_glue("{abbrv}, {oprt_true}")),
+  #   hjust = -.25,
+  #   size = 6
+  # ) +
   scale_y_continuous(limits = c(0, 50)) +
   scale_fill_manual(values = c("#bdc9e1", "#045a8d")) +
   coord_flip() +
@@ -117,4 +117,50 @@ kff %>%
     title = "National opioid overdose mortality, tracking legislation promoting access/use of Naloxone",
     subtitle = "Legislation status drawn from Doleac & Mukherjee, 2018 (SSRN preprint)"
   )
+```
+
+So, there's a paper that's been taking up free rent in my brain for the past week. [*"The Moral Hazard of Lifesaving Innovations: Naloxone Access, Opioid Abuse, and Crime",*](https://papers.ssrn.com/sol3/papers.cfm?abstract_id=3135264) by Jennifer Doleac and Anita Mukherjee was posted on SSRN this past Tuesday. My awareness of the manuscript was cued by the same thing that's prompting me to sit down on a Saturday, and try to get down the thoughts I'm struggling with. The paper's findings pose some potentially troubling implications (possibly open for misinterpretation by the public), and debate over the paper's methodology hasn't been straightforward. The paper looks at the impact of state legislation that supports greater access/distribution of the opioid antagonist Naloxone (aka Narcan). Naloxone is administered to persons experiencing an opioid overdose, either via injection or through a nasal spray. It can help someone who's gone unconscious or stopped breathing, to keep them alive long enough for emergency medical support to arrive. From what I'm seeing practitioners say, it's an extremely painful experience to have this drug used on you; essentially inducing opioid withdrawal.
+
+Naloxone isn't a controlled substance, but getting access to the drug can be complicated. It's carried by paramedics, and it's become more normal for other first responders to have it, but its availability to otherwise average citizens in the US varies by state. Deaths from opioid overdoses have been climbing since the 90s, but have spiked since 2013 from 8 deaths per 100,000 individuals to above 10, nationally. It's common understanding at this point that the rise in deaths hasn't been distributed evenly across the country, and that the midwest and northeastern US has been hit hardest. In some states, the rate is above 20 per 100,000. Because of this, communities and states have pushed lawmakers to enact laws that make it easier for citizens to purchase Naloxone, raising the chances for individuals to intervene when they encounter someone experiencing an overdose. It isn't a treatment for addiction; Naloxone's sole function is to save someone from death that would've otherwise occurred as a result of overdose.
+
+### Naloxone availability as a moral hazard
+
+Doleac & Mukherjee's paper poses the question of whether the availability of Naloxone has lowered the potential risk and costs for individuals to engage in the abuse of opioids. The argument is that, as a net pattern, we would see individuals being saved by Naloxone going on to continue using, and engage in related (undesirable) behaviors (such as theft). This formulation isn't novel; economists and social scientists have studied the impact of policies on risky behavior in the context of traffic laws (e.g. seat belts), and sexually transmitted disease, among others. The authors of this paper have experienced a huge amount of vitriol online. I've lurked on twitter long enough for this not to surprise me, but I want to mention I feel it's inappropriate, especially because concerns about the potential methodological issues with the paper are being drowned out by claims that the paper's results are merely extensions of the authors' beliefs. This is always a possibility; scientists are humans, after all. But I just want to note the following:
+
+  1. I've seen both authors trying to do their best to respond to questions, and their responses in general have seemed receptive to feedback
+  2. I'm worried that the results of this paper don't reflect a complete picture of this problem, but this highlights the need for an adequate alternative explanation and understanding of the study's limitations
+  3. Abuse of the authors doesn't help the case for 2)
+
+I've seen the common academic refrain, that *one study isn't definitive*, which is true. However, while the impact of research on public discourse and belief can't be immediately known, this study discusses an ongoing and highly visible health crisis, raising its profile and potential impact. The results from this study could easily be used as justification by policy-makers to reintroduce restrictions on a life-saving medication, which warrants attention and concern.
+
+### what the paper claims
+
+Here's a rough overview based on the paper's abstract:
+
+1. Since 2011, increasing numbers of states have adopted legislation that would promote the availability and access of Naloxone
+    - Laws of this kind would include:
+        - "standing orders", enabling anyone to buy the drug at local pharmacies
+        - prescriber or dispenser immunity, empowering good samaritans to intervene
+2. They observe that states that adopted these laws show higher numbers of emergency room visits, with no decrease in opioid mortality
+3. They observe that rates of opioid-related crime (as measured by arrests) increase, following the adoption of the laws
+4. They argue that their results support the idea that the adoption of such laws increased the usage of Fentanyl (a more powerful opioid), as a consequence of lowering the associated risk of use
+
+I've seen several other folks weigh in on issues they've had with the paper, this thread by [Alex Gertner](https://twitter.com/setmoreoff/status/971531505779560448), being one good example.
+
+```{r gertner-tweet}
+blogdown::shortcode("tweet", "971531522158325762")
+```
+
+As Gertner points out in an earlier tweet, arrest data isn't a direct (or particularly good) measure of crime, rather, such data is better thought of as a marker of police activity. Something this paper doesn't fully address is how the adoption of these policies might affect police behaviors and policing practices. I've also seen several responses criticizing the paper for positing the increased use of Fentanyl as being a result of laws related to Naloxone, without adequately outlining the mechanisms that would support this claim. I've seen many anecdotal claims (like [this one](https://twitter.com/sethblais/status/971467354466148354)) that changes in how opioids are supplied to communities might be driven by changes further up in the supply chain, rather than demand from users. The other lurking question I've seen echoed in many places is that the impact of these laws is unlikely to be uniform in each state. Their implementation will be affected by many local factors, which could affect availability. This doesn't seem to be discussed in detail by the papers' authors, and the outcomes they measure (arrests, ER visits, crime) were measured only through 2015. In the case of many states, this was really close to when they enacted their laws.
+
+### which states were most likely to adopt these kinds of laws?
+
+Aside from what I've mentioned, I have some more fundamental concerns, and I'm still unsure if my intuitions about the problem are correct. The research design of this paper is premised on the idea that we can treat the adoption of these laws as a *natural experiment,* isolating their impact on outcomes like crime, ER visits, and mortality. We obviously didn't have the ability to randomly assign which states would enact the laws, but we do have some ability to adjust for the characteristics of different states. Scientists approach this problem using regression models, attempting to make causal inference on the impact of key variables, assuming a number of assumptions are met.
+
+What's bothered me is the strong claims of causality in the paper, and the assertion that the adoption of these policies can be treated as a natural experiment. To quote the authors: "We use the effective dates of Naloxone access policies as *exogenous shocks* to the risk of death from opioid use, in a difference-in-differences (DD) framework. ... The identifying assumption is that, absent the policies, and conditional on a broad set of control variables, our *outcome measures of interest would have evolved similarly in treatment and control jurisdictions.*"
+
+Below is a figure I put together using annual data I collected online via Kaiser Family Foundations, and __ & __'s Figure 2, which illustrates which states adopted laws pushing Naloxone expansion during a given year.
+
+```{r fig.height=8, fig.width=11}
+plotly::ggplotly(p1)
 ```
