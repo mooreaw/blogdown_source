@@ -1,0 +1,105 @@
+---
+title: "estimating match-win percentages, using Bayesian inference"
+author: Andrew
+date: '2018-08-16'
+slug: beta-binom-mw-mtg
+tags: ["R", "Bayes", "statistics", "mtg"]
+draft: true
+---
+
+```{r opts, include = FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
+```
+
+Perhaps it's a mistake to intentionally mix two of my deeply ____ hobbies-- *Magic: The Gathering* and learning about statistics-- but I've felt emboldened by recent work from Frank Karsten. I also want to transcribe some of the progress I've been making in teaching myself the fundamentals of Bayesian inference. I'll start with introductions on why I'm mingling these two topics, and then I'll cover the mechanical aspects of using Bayesian methods to estimate something most *Magic* players care about (at least a little): match-win percentages.
+
+I'll start with *Magic*. I've been playing at least semi-regularly since 2011, when introduced to the game by a college friend. It's one of the oldest collectable card-games, in which players use spells and creatures to face each other in a sorcerous duel.<!-- To non-players, I think the game's appeal can be difficult to understand, but I've found it to be an enriching experience, and it's helped me maintain friendships and ties even after moving across the US in 2013.--> My interests in collecting cards has never been very strong, but what's held my interest as a player has been a particular way of playing the game: its "limited" format, both drafting and sealed deck construction. In this style of play, players aren't bringing pre-constructed decks of cards to compete with each other. Instead, players open booster packs (randomly assorted packs of 15 cards from an expansion set) and use them to create a deck based on what they open. For sealed deck, individual players open a pool of 90 cards to build a 40-card deck. In practice, only 22-23 cards from the 90 card pool are selected for play, the remainder of the 40-card deck is made up of universal cards (called "lands") that provide resources to the player during each turn. For draft, players are still selecting 22-23 cards, but instead of working from a single pool, players pass booster packs around a table and select single cards until they've picked 45 cards. As you would expect, one of the primary skill-testing aspects of these formats is the fact that you're playing with a new set of cards each time. You're not fully able to control the quality of cards you'll use, so being able to evaluate the relative strengths of different cards and synergies is key to a player's success.<!-- There are some powerful features at work that I think are key to the experience-- both are related to the influence of randomness and chance. First, you can't control the exact quality of cards you'll play with on a given day. Because of this, success often depends on your ability to think strategically about how you approach building your deck. This leads to the second point, which is that you can gain advantages by understanding how different cards work in a vacuum, and in the larger context/environment in which they're played. -->
+<!--
+I like to tinker and iterate on problems, and I think this is why *Magic* has consistently appealed to me. In college, my independent research studies as a psychology student were concentrated on how personality relates to ones motivations and preferences concerning games. I learned quite a bit about questionnaire design and statistics from this project, in addition to being exposed to a lot of [great]() [work]() in this area. However, the concept of games being used as vehicles and safe spaces to pursue mastery or achievement has been something that's stuck with me. Individual activities we choose for leisure might not say much by themselves, but what meaning those activities have for each person I think can tell us something about ourselves. *Magic* has definitely filled a certain space for me-- a lot of projects we take on don't have fully linear paths. It's nice to challenge yourself on something with lower stakes, and clearly defined goals (at least within a given match).
+-->
+
+So, how does Bayesian inference fit into this? Why mix these things together? Well, humans have long been interested in leveraging statistics to understand games and predict their outcomes-- and I'm no exception. *Magic* is a hard game; even among professional players, a win percentage between 60% and 70% is respectable. Curious about aspects of my performance, I decided I was going to start recording my results over the last year, and I'm at the point where I can start digging into things. The reason why I'm focusing on *Bayesian* methods in particular is because I want to take advantage of one of its signature features: utilizing prior information. 
+
+For example, if I was planning on surveying the heights of everyone who works in my building, I'd assume beforehand that the distribution would probably be normal, and would probably be centered a little over 5 feet. Under a classical approach for estimation, this prior information isn't utilized. Classical/frequentist approaches operate under the assumption that whatever parameter we're estimating is "fixed"-- knowable, if you had access to the entire population. Under a Bayesian approach, the data we collect is "fixed"-- based off what we collect, we try to estimate the distribution that generated our data. 
+
+```{r}
+library(tidyverse)
+library(ggridges)
+library(lubridate)
+library(scales)
+library(scico)
+
+raw <- read_csv("../../static/data/bayes-mtg-binom/mw-records.csv")
+
+# sum the total number of matches won/lost during each week
+dat <- raw %>%
+  group_by(wk = week(date)) %>%
+  summarise(
+    mw = sum(mw),
+    ml = sum(ml)
+  )
+
+# generate priors
+# for the initial week, I'll discount my results from DOM by 10%
+dat <- dat %>%
+  mutate(
+    a = lag(mw),
+    b = lag(ml),
+    a = ifelse(is.na(a), 14.5, a) %>% cumsum(),
+    b = ifelse(is.na(b), 17.1, b) %>% cumsum()
+  )
+```
+
+```{r}
+# a grid, over which we'll approximate the results
+grd <- seq(0, 1, .001)
+
+# for each week, calculate shape parameters for a posterior distribution
+posts <- map_df(
+  1:nrow(dat),
+  ~data_frame(
+    a = dat$mw[.] + dat$a[.],
+    b = dat$ml[.] + dat$b[.],
+    x = grd,
+    y = dbeta(grd, a, b)
+  ),
+  .id = "week"
+)
+
+# plot the results
+posts %>%
+  mutate(week = fct_rev(week)) %>%
+  ggplot(aes(x = x, y = week, height = y, fill = week)) +
+  geom_ridgeline(alpha = .8) +
+  scale_x_continuous(label = percent) +
+  scale_fill_manual(
+    values = scico(7, palette = "tokyo"),
+    name   = "Week",
+    guide  = FALSE
+  ) +
+  theme_minimal() +
+  labs(x = "Match-Win %", y = "Week")
+
+cis <- posts %>%
+  distinct(week, a, b) %>%
+  group_by(week) %>%
+  summarise(ci = lst(qbeta(c(.05, .5, .95), a, b))) %>%
+  unnest(ci) %>%
+  group_by(week) %>%
+  mutate(index = c("lower", "median", "upper")) %>%
+  spread(index, ci)
+
+dat <- bind_cols(dat, cis[, -1])
+
+dat
+
+
+lol <- tribble(
+  ~"author", ~"book", ~bookid,
+  "jane", "brewing exceptional coffee", 1,
+  "jane", "brewing exceptional coffee", 1,
+  "jane", "another masterpiece", 2,
+  "jack", "rolling down a hill", 3,
+  "james", "the prince", 4
+)
+```
